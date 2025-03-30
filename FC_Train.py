@@ -14,7 +14,6 @@ from torch.utils.data import TensorDataset, DataLoader
 import matplotlib.pyplot as plt
 
 
-
 # All Helpers:
 
 def clean_text(text):
@@ -98,9 +97,8 @@ class FoodClassifier(nn.Module):
 
 # Training the model
 
-df = pd.read_csv("cleaned_data_combined_modified.csv")
 data_file = "cleaned_data_combined_modified.csv"
-
+vocab_size = 700
 combined_qs = []
 all_data = csv.reader(open(data_file))
 for i, line in enumerate(all_data):
@@ -109,17 +107,22 @@ for i, line in enumerate(all_data):
         [f'{line[1]} {line[2]} {line[3]} {line[4]} {line[5]} {line[6]} {line[7]} {line[8]}', f'{line[9]}']
     )
 
-texts = []
-labels = []
-for dp in combined_qs:
-    texts.append(item[0])
-    labels.append(item[1])
+texts = np.array([item[0] for item in combined_qs])
+labels = np.array([item[1] for item in combined_qs])
+
+# kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+# fold_accuracies = []
+# fold_losses = []
+# for fold, (train_i, val_i) in enumerate(kfold.split(texts)):
+    # print(f"Fold {fold+1}")
+    # X_train_texts, X_val_texts = texts[train_i],texts[val_i]
+    # y_train_texts, y_val_texts = labels[train_i],labels[val_i]
+
+# In order to use this kfold uncomment the kfold code and indent everything below up until the plots and fix minor erros it causes
 
 X_train_texts, X_tv_texts, y_train_texts, y_tv_texts = train_test_split(texts, labels, test_size=0.2, random_state=42, shuffle=True)
 X_val_texts, X_test_texts, y_val_texts, y_test_texts = train_test_split(X_tv_texts, y_tv_texts, test_size=0.5, random_state=42, shuffle=True)
-vocab1 = create_vocab(X_train_texts, 700)
-
-# vocab1 = create_vocab(X_train_texts, 500)
+vocab1 = create_vocab(X_train_texts, vocab_size)
 
 #TODO: Maybe add k fold cross valididation
 
@@ -146,8 +149,7 @@ y_test_tensor = torch.tensor(y_test, dtype=torch.long)
 train_dataset =TensorDataset(X_train_tensor, y_train_tensor)
 train_loader =DataLoader(train_dataset,batch_size=32, shuffle=True)
 
-
-model = FoodClassifier(input_dim=700, hidden_dim=64, output_dim=3)
+model = FoodClassifier(input_dim=vocab_size, hidden_dim=64, output_dim=3)
 
 # training using CEL
 cel = nn.CrossEntropyLoss()
@@ -161,10 +163,10 @@ val_accuracies = []
 for epoch in range(num_epochs):
     model.train()
     total_loss = 0
-    for inputs, labels in train_loader:
+    for inputs, y_labels in train_loader:
         optimizer.zero_grad()
         outputs = model(inputs)
-        loss = cel(outputs, labels)
+        loss = cel(outputs, y_labels)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
@@ -180,19 +182,26 @@ for epoch in range(num_epochs):
         val_acc = (predicts == y_val_tensor).float().mean().item()
         val_accuracies.append(val_acc)
         val_losses.append(val_loss.item())
-
     print(f"Epoch {epoch+1}, Loss: {total_loss:.5f}, Validation Acc: {val_acc:.5f}", f"Val Loss: {val_loss.item():.5f}")
 
+
+# fold_accuracies.append(val_acc)
+# fold_losses.append(val_loss)
+
+# avg_kacc = sum(fold_accuracies)/len(fold_accuracies)
+# avg_kloss = sum(fold_losses)/len(fold_losses)
+# print(f"Average K Fold Cross Validation Accuracy: {avg_kacc:.5f}", f"Average K Fold Cross Validation loss: {avg_kloss:.5f}")
 
 # the test
 model.eval()
 with torch.no_grad():
     outputs = model(X_test_tensor)
     predicts = torch.argmax(outputs, dim=1)
+    t_loss = cel(outputs, y_test_tensor)
     # print("predictions",predicts)
     # print(y_test_tensor)
     t_acc = (predicts == y_test_tensor).float().mean().item()
-    print(f"Test Accuracy: {t_acc:.5f}")
+    print(f"Test Accuracy: {t_acc:.5f}", f"Test Loss: {t_loss:.5f}")
 
 
 #plot the graphs for training loss validation accuracy and validation loss
